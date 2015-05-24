@@ -1,3 +1,9 @@
+-- TODO:
+-- * add squares and roots of values, after quantile #s are added.
+-- (since monotonic I don't think they will affect quantile)
+-- * windowed is probably a big bottleneck since it's converting to lists
+--   but could be slicing the vector
+--
 {-# LANGUAGE OverloadedStrings #-}
 module Asx.Entries.RawEntry where
 
@@ -237,19 +243,49 @@ predict e future
 
 daysHistory = 200
 daysFuture  = 50
-minVolume = 10000
-daysAboveMin = 50
+minVolume = 100000
+daysAboveMin = 100
 
 filterVolumes :: V.Vector RawEntry -> Bool
 filterVolumes vols
  = (V.length $ V.filter (>minVolume) $ V.map volume vols) > daysAboveMin
 
+filterMissing :: V.Vector RawEntry -> Bool
+filterMissing vs
+ = let dates = V.map (dateOf.date) vs
+       steps = V.zip dates (V.drop 1 dates)
+       diffs = V.map diffD steps
+       maxi  = V.maximum diffs
+   in  maxi  < 2
+ where
+  -- a few days missing isn't a big deal
+  -- so it's easier to count months
+  diffD ((y,m,d), (y',m',d'))
+   = let years = y' - y
+         mm    = m - (years * 12)
+     in m' - mm
+
+  dateOf :: String -> (Int,Int,Int)
+  dateOf [y1,y2,y3,y4, '-', m1, m2, '-', d1, d2]
+   = (read [y1,y2,y3,y4], read [m1,m2], read [d1,d2])
+
+filterNotZero :: RawEntry -> Bool
+filterNotZero e
+ =  open e > 0
+ && close e > 0
+ && low e > 0
+ && high e > 0
+ && adjclose e > 0
+
+
 trainEntries stride records
  = map (\(pre,e,post) -> (features pre e, date e, predict_growth pre e post))
+ $ filter (\(pre,e,post) -> filterMissing (pre V.++ post))
  $ filter (\(pre,e,post) -> filterVolumes pre)
  $ strided stride
  $ V.toList
  $ windowed daysHistory daysFuture
+ $ V.filter filterNotZero
  $ records
  where
   strided _ []
@@ -259,10 +295,12 @@ trainEntries stride records
 
 predictEntries records
  = map (\(pre,e,post) -> (features pre e, date e))
+ $ filter (\(pre,e,post) -> filterMissing pre)
  $ filter (\(pre,e,post) -> filterVolumes pre)
  $ V.toList
  $ lastOfVec
  $ windowed daysHistory 0
+ $ V.filter filterNotZero
  $ records
  where
   lastOfVec v
