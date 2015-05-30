@@ -47,9 +47,14 @@ downloadUrl c
 
 storagefile :: Company -> String
 storagefile c
- = "raw/" ++ clean (gicsGroup c) ++ "/" ++ clean (asxCode c) ++ ".csv"
+ = "raw/" ++ cleanGroup c ++ "/" ++ clean (asxCode c) ++ ".csv"
+
+cleanGroup :: Company -> String
+cleanGroup c
+ = clean (gicsGroup c)
+
+clean = filter (not . flip elem bads)
  where
-  clean = filter (not . flip elem bads)
   bads  = " \t\r\n./\\&"
 
 

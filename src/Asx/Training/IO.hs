@@ -11,6 +11,8 @@ import Asx.Internal.Http
 import Control.Applicative
 import Control.DeepSeq
 import Control.Monad
+import qualified Control.Concurrent.ParallelIO as P
+import qualified Control.Concurrent            as C
 
 import qualified System.Directory as D
 import qualified Data.ByteString.Lazy as BL
@@ -28,26 +30,35 @@ fileOfTrainingCommand (TrainInto s) = Just s
 fileOfTrainingCommand (TrainLabels s) = Just s
 
 forCompanies
-    :: (a -> Company -> IO a)
+    :: (Int -> a -> Company -> IO a)
+    -> (a -> a -> a)
     -> a
     -> [String]
     -> IO a
-forCompanies exec acc codes
+forCompanies exec join acc codes
  = do list <- getCompaniesList
+      caps <- C.getNumCapabilities
 
       case list of
        Left err -> print err >> return acc
        Right cs
         -> if   null codes
-           then V.foldM exec         acc cs
+           then do as <- P.parallel [V.foldM (exec i) acc (chunkI i caps cs) | i <- [0..caps-1]]
+                   return $ foldl join acc as
            else   foldM (execFor cs) acc codes
  where
   execFor cs acc' code
    | Just c <- V.find ((==code) . asxCode) cs
-   = exec acc' c
+   = exec 0 acc' c
    | otherwise
    = do putStrLn (code ++ ": invalid code")
         return acc'
+
+  chunkI i caps cs
+   = let sz = V.length cs `div` caps 
+     in  if   i == caps-1
+         then V.drop (sz*i) cs
+         else V.slice (sz*i) sz cs
 
 
 readCompany :: (V.Vector RawEntry -> IO a) -> a -> Company -> IO a
@@ -80,20 +91,20 @@ training stride quants into codes
 
       -- Run
       putStrLn "Computing data"
-      forCompanies (\a c -> readCompany (run q c) () c) () codes
+      forCompanies (\cap a c -> readCompany (run cap q c) () c) (\_ _ -> ()) () codes
       return ()
       
  where
-  run q c contents
+  run cap q c contents
    = do let trained = trainEntries stride contents
             qt      = map (\(f,d,l) -> (addQuantilesToFeature q f, d, l)) trained
         case into of
          TrainPrint
           -> mapM_ print qt
          TrainInto i
-          -> mapM_ (appendFile i . showTrainedAsVw c) qt
+          -> mapM_ (appendFile (i ++ show cap) . showTrainedAsVw c) qt
          TrainLabels i
-          -> mapM_ (appendFile i . showLabelAsVw c) qt
+          -> mapM_ (appendFile (i ++ show cap) . showLabelAsVw c) qt
 
         putStrLn "OK"
 
@@ -109,17 +120,17 @@ predict quants into codes
 
       -- Run
       putStrLn "Computing data"
-      forCompanies (\a c -> readCompany (run q c) () c) () codes
+      forCompanies (\cap a c -> readCompany (run cap q c) () c) (\_ _ -> ()) () codes
       return ()
       
  where
-  run q c contents
+  run cap q c contents
    = do let preds   = predictEntries contents
             qt      = map (\(f,d) -> (addQuantilesToFeature q f, d)) preds
 
         maybe   
                 (mapM_ print qt)
-                (\i -> mapM_ (appendFile i . showPredictAsVw c) qt)
+                (\i -> mapM_ (appendFile (i++show cap) . showPredictAsVw c) qt)
                 into
 
         putStrLn "OK"
@@ -137,13 +148,13 @@ writeQuantiles stride into codes
 
 
 getQuantiles stride codes
- = do   q <- forCompanies readAndFold emptyFQ codes
+ = do   q <- forCompanies readAndFold mergeFQ emptyFQ codes
         deepseq q $ putStrLn "Folds done."
         putStrLn "Converting to lookups"
         let los = lookupFQ 10 q
         return los
  where
-  readAndFold acc c
+  readAndFold _cap acc c
    = do q' <- readCompany get1q emptyFQ c
         let acc' = mergeFQ acc q'
         deepseq acc' $ return acc'

@@ -1,22 +1,20 @@
+{-# LANGUAGE BangPatterns #-}
 module Asx.Entries.Window where
-import qualified Data.Vector as V
+import qualified Data.Vector         as V
 
-windowed    :: Int -> Int
+{-# INLINE windowed #-}
+windowed    :: Int -> Int -> Int
             -> V.Vector e
             -> V.Vector (V.Vector e, e, V.Vector e)
-windowed back forth elms
- -- dumb simple
- = V.fromList
- $ go [] 
- $ V.toList elms
+windowed !back !forth !stride !elms
+ = V.unfoldr go 0
  where
-  go _ []
-   = []
-  go seen (e:es)
-   = let pre  = take back seen
-         post = take forth es
-     in  if    length pre  == back
-            && length post == forth
-         then  (V.fromList (reverse pre), e, V.fromList post) : go (e : seen) es
-         else                           go (e : seen) es
+  !len = V.length elms
+  !tot = back + forth + 1
+
+  go i
+   | i + tot <= len
+   = Just ((V.unsafeSlice i back elms, V.unsafeIndex elms (i+back), V.unsafeSlice (i+back+1) forth elms), i + stride + 1)
+   | otherwise
+   = Nothing
 

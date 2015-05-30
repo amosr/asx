@@ -31,10 +31,14 @@ merge (QtDouble lneg lpos) (QtDouble rneg rpos)
 
 insert :: Double -> QtDouble -> QtDouble
 insert v (QtDouble qneg qpos)
- | isPos v
+ -- ignore NaNs
+ | v /= v
+ = QtDouble qneg qpos
+
+ | isPos (toInt v)
  = QtDouble qneg (Q.insert (toInt v) qpos)
  | otherwise
- = QtDouble (Q.insert (toInt (negate v)) qneg) qpos
+ = QtDouble (Q.insert (negate $ toInt v) qneg) qpos
 
 quantiles :: Int -> QtDouble -> Lookup
 quantiles i (QtDouble qneg qpos)
@@ -44,7 +48,7 @@ quantiles i (QtDouble qneg qpos)
 
 lookupQ :: Lookup -> Double -> Int
 lookupQ (Lookup ln lp) v
- | isPos v
+ | isPos (toInt v)
  = Q.lookupQ lp (toInt v)
  | otherwise
  = negate $ Q.lookupQ ln $ negate $ toInt v
@@ -53,6 +57,6 @@ lookupQ (Lookup ln lp) v
 toInt :: Double -> Int
 toInt v = round (v * 1000)
 
-isPos :: Double -> Bool
+isPos :: Int -> Bool
 isPos v = v >= 0
 

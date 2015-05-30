@@ -5,6 +5,7 @@
 --   but could be slicing the vector
 --
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Asx.Entries.RawEntry where
 
 import Asx.Entries.Company
@@ -26,6 +27,8 @@ import qualified Data.Map as Map
 import Control.DeepSeq
 
 import Text.Printf
+
+import Debug.Trace
 
 data RawEntry
  = RawEntry
@@ -122,6 +125,20 @@ features history re
    ++ grads "e6"    (chunk 6 8)
    ++ grads "e7"    (chunk 7 8)
 
+   ++ devs  "whole"  history
+   ++ devs  "c0"    (chunk 0 4)
+   ++ devs  "c1"    (chunk 1 4)
+   ++ devs  "c2"    (chunk 2 4)
+   ++ devs  "c3"    (chunk 3 4)
+   ++ devs  "e0"    (chunk 0 8)
+   ++ devs  "e1"    (chunk 1 8)
+   ++ devs  "e2"    (chunk 2 8)
+   ++ devs  "e3"    (chunk 3 8)
+   ++ devs  "e4"    (chunk 4 8)
+   ++ devs  "e5"    (chunk 5 8)
+   ++ devs  "e6"    (chunk 6 8)
+   ++ devs  "e7"    (chunk 7 8)
+
    ++ grows "whole"  history
    ++ grows "c0"    (chunk 0 4)
    ++ grows "c1"    (chunk 1 4)
@@ -151,31 +168,30 @@ features history re
    ,(prefix ++ "_open_on_volume",days part open_on_vol)
    ]
 
-  grads prefix part =
-   [(prefix ++ "_open",         grad part open)
-   ,(prefix ++ "_high",         grad part high)
-   ,(prefix ++ "_low",          grad part low)
-   ,(prefix ++ "_close",        grad part close)
-   ,(prefix ++ "_adjclose",     grad part adjclose)
-   ,(prefix ++ "_diff_oc",      grad part diff_oc)
-   ,(prefix ++ "_diff_oac",     grad part diff_oac)
-   ,(prefix ++ "_volume",       grad part volume)
-   ,(prefix ++ "_volume_on_open",grad part vol_on_open)
-   ,(prefix ++ "_open_on_volume",grad part open_on_vol)
+  mkscalars fun prefix part =
+   [(prefix ++ "_open",          fun part open)
+   ,(prefix ++ "_high",          fun part high)
+   ,(prefix ++ "_low",           fun part low)
+   ,(prefix ++ "_close",         fun part close)
+   ,(prefix ++ "_adjclose",      fun part adjclose)
+   ,(prefix ++ "_diff_oc",       fun part diff_oc)
+   ,(prefix ++ "_diff_oac",      fun part diff_oac)
+   ,(prefix ++ "_volume",        fun part volume)
+   ,(prefix ++ "_volume_on_open",fun part vol_on_open)
+   ,(prefix ++ "_open_on_volume",fun part open_on_vol)
    ]
 
-  grows prefix part =
-   [(prefix ++ "_avg_open",          avg_growth $ V.map open part)
-   ,(prefix ++ "_avg_high",          avg_growth $ V.map high part)
-   ,(prefix ++ "_avg_low",           avg_growth $ V.map low part)
-   ,(prefix ++ "_avg_close",         avg_growth $ V.map close part)
-   ,(prefix ++ "_avg_adjclose",      avg_growth $ V.map adjclose part)
-   ,(prefix ++ "_avg_diff_oc",       avg_growth $ V.map diff_oc part)
-   ,(prefix ++ "_avg_diff_oac",      avg_growth $ V.map diff_oac part)
-   ,(prefix ++ "_volume",            avg_growth $ V.map volume part)
-   ,(prefix ++ "_volume_on_open",    avg_growth $ V.map vol_on_open part)
-   ,(prefix ++ "_open_on_volume",    avg_growth $ V.map open_on_vol part)
-   ]
+
+  grads
+   = mkscalars grad
+
+  devs prefix part
+   =  mkscalars devi (prefix++"_dev") part
+   ++ mkscalars devi_rel (prefix++"_dev_rel") part
+
+  grows prefix part
+   = mkscalars (\v f -> avg_growth $ V.map f v) (prefix++"_avg") part
+
 
   diff_oc e  = close e - open e
   diff_oac e = adjclose e - open e
@@ -202,9 +218,19 @@ features history re
 
   grad hist pricer
    = gradient
-   $ zip [0..]
-   $ map pricer
-   $ V.toList hist
+   $ V.map (\(i,f) -> (fromIntegral i, pricer f))
+   $ V.indexed
+   $ hist
+
+  devi hist pricer
+   = stddev
+   $ V.map pricer
+   $ hist
+
+  devi_rel hist pricer
+   = devi hist pricer / open re
+
+
 
   between x y z = z >= x && z < y
 
@@ -212,12 +238,6 @@ features history re
    = let p = pricer re
      in V.length
       $ V.filter (\h -> f (pricer h `divvy` p)) hist
-
-divvy x y
- | y == 0
- = 0
- | otherwise
- = x / y
 
 
 avg_growth :: V.Vector Double -> Double
@@ -236,9 +256,9 @@ predict_growth hist e future
 
 predict e future
  = gradient
- $ zip [0..]
- $ map (\f -> low f `divvy` low e)
- $ V.toList future
+ $ V.map (\(i,f) -> (fromIntegral i, low f `divvy` low e))
+ $ V.indexed
+ $ future
 
 
 daysHistory = 200
@@ -279,32 +299,27 @@ filterNotZero e
 
 
 trainEntries stride records
- = map (\(pre,e,post) -> (features pre e, date e, predict_growth pre e post))
- $ filter (\(pre,e,post) -> filterMissing (pre V.++ post))
- $ filter (\(pre,e,post) -> filterVolumes pre)
- $ strided stride
- $ V.toList
- $ windowed daysHistory daysFuture
+ = V.toList
+ $ V.map (\(pre,e,post) -> (features pre e, date e, predict_growth pre e post))
+ $ V.filter (\(pre,e,post) -> filterMissing (pre V.++ post))
+ $ V.filter (\(pre,e,post) -> filterVolumes pre)
+ $ windowed daysHistory daysFuture stride
  $ V.filter filterNotZero
  $ records
- where
-  strided _ []
-   = []
-  strided n (x:xs)
-   = x : strided n (drop n xs)
 
 predictEntries records
  = map (\(pre,e,post) -> (features pre e, date e))
  $ filter (\(pre,e,post) -> filterMissing pre)
  $ filter (\(pre,e,post) -> filterVolumes pre)
- $ V.toList
  $ lastOfVec
- $ windowed daysHistory 0
+ $ V.toList
+ $ windowed daysHistory 0 1
  $ V.filter filterNotZero
  $ records
  where
+  lastOfVec [] = []
   lastOfVec v
-   = V.drop (V.length v - 1) v
+   = [last v]
 
 
 addQuantilesToFeature :: FeaturesQL -> Features -> Features
@@ -326,21 +341,35 @@ addQuantilesToFeature (FeaturesQL qdays qgrads) (Features days grads)
   lookupDay :: (String, Int) -> [(String,Double)]
   lookupDay (nm,val)
    | Just ql <- Map.lookup nm qdays
-   = mkEntry "day" nm $ Q.lookupQ ql val
+   = mkEntry "day" nm (fromIntegral val) $ Q.lookupQ ql val
    | otherwise
    = []
 
   lookupGrad :: (String, Double) -> [(String,Double)]
   lookupGrad (nm,val)
    | Just ql <- Map.lookup nm qgrads
-   = mkEntry "grad" nm $ QD.lookupQ ql val
+   = mkEntry "grad" nm val $ QD.lookupQ ql val
    | otherwise
    = []
 
-  mkEntry :: String -> String -> Int -> [(String,Double)]
-  mkEntry pre nm val
-   = [ ("quant_" ++ pre ++ "_" ++ nm, fromIntegral val)
-     , ("quant_" ++ pre ++ "_" ++ nm ++ "_" ++ show val, 1) ]
+  mkEntry :: String -> String -> Double -> Int -> [(String,Double)]
+  mkEntry pre nm val qtl
+   = [ ("quant_" ++ pre ++ "_" ++ nm, fromIntegral qtl)
+     , ("quant_" ++ pre ++ "_" ++ nm ++ "_" ++ show qtl, 1)
+     , ("sqrt_sign_" ++ pre ++ "_" ++ nm, signed_sqrt val) 
+     , ("sqrt_abs_" ++ pre ++ "_" ++ nm, sqrt $ abs val) ]
+
+  signed_square v
+   | v >= 0
+   = v * v
+   | otherwise
+   = negate (v * v)
+
+  signed_sqrt v
+   | v >= 0
+   = sqrt v
+   | otherwise
+   = negate $ sqrt $ negate v
 
 
 data FeaturesQ
@@ -406,7 +435,9 @@ lookupFQ i (FeaturesQ qdays qgrads)
 
 showTrainedAsVw :: Company -> (Features, String, Double) -> String
 showTrainedAsVw c (Features changes grads, date, label)
- = show label ++ " " ++ show importance ++ " '" ++ asxCode c ++ "-" ++ date ++ " | " ++ showChanges ++ " " ++ showGrads ++ "\n"
+ = show_float c date "label" label ++ " " ++ show importance ++ " '" ++ asxCode c ++ "-" ++ date
+ ++ " |all " ++ showChanges ++ " " ++ showGrads
+ ++ " |cat_" ++ cleanGroup c ++ " " ++ showChanges ++ " " ++ showGrads ++ "\n"
  where
   showChanges
    = intercalate " "
@@ -419,14 +450,11 @@ showTrainedAsVw c (Features changes grads, date, label)
 
   showGrads
    = intercalate " "
-   $ map (\(t,v) -> ("grad_" ++ t ++ ":" ++ show v))
+   $ map (\(t,v) -> ("grad_" ++ t ++ ":" ++ show_float c date ("grad_" ++ t) v))
    $ grads
 
   -- False negatives are better than false positives
   importance
-   | label < 0
-   = 5
-   | otherwise
    = 1
 
 showPredictAsVw :: Company -> (Features, String) -> String
@@ -435,5 +463,14 @@ showPredictAsVw c (f, date)
 
 showLabelAsVw :: Company -> (Features, String, Double) -> String
 showLabelAsVw c (_, date, label)
- = printf "%.6f" label ++ " " ++ asxCode c ++ "-" ++ date ++ "\n"
+ = show_float c date "label" label ++ " " ++ asxCode c ++ "-" ++ date ++ "\n"
 
+show_float :: Company -> String -> String -> Double -> String
+show_float c d g f
+ | abs f > maxvwfloat
+ , trace ("show float bad: " ++ show (c,d,g)) False
+ = ""
+ | otherwise
+ = printf "%.6f" f
+
+maxvwfloat = 18446745899999999999
