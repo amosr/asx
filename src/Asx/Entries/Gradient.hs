@@ -21,7 +21,7 @@ stddev   gs
 
 
 divvy x y
- | y == 0 || y /= y
+ | y == 0 || y /= y || x == 0 || x /= x
  = 0
  | otherwise
  = x / y

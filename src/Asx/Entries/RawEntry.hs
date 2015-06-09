@@ -50,7 +50,7 @@ instance FromNamedRecord RawEntry where
      <*> r .: "High"
      <*> r .: "Low"
      <*> r .: "Close"
-     <*> r .: "Volume"
+     <*> ((/10000) <$> r .: "Volume")
      <*> r .: "Adj Close"
 
 data EntryError
@@ -152,6 +152,34 @@ features history re
    ++ grows "e5"    (chunk 5 8)
    ++ grows "e6"    (chunk 6 8)
    ++ grows "e7"    (chunk 7 8)
+
+   ++ heads "whole"  history
+   ++ heads "c0"    (chunk 0 4)
+   ++ heads "c1"    (chunk 1 4)
+   ++ heads "c2"    (chunk 2 4)
+   ++ heads "c3"    (chunk 3 4)
+   ++ heads "e0"    (chunk 0 8)
+   ++ heads "e1"    (chunk 1 8)
+   ++ heads "e2"    (chunk 2 8)
+   ++ heads "e3"    (chunk 3 8)
+   ++ heads "e4"    (chunk 4 8)
+   ++ heads "e5"    (chunk 5 8)
+   ++ heads "e6"    (chunk 6 8)
+   ++ heads "e7"    (chunk 7 8)
+
+   ++ lasts "whole"  history
+   ++ lasts "c0"    (chunk 0 4)
+   ++ lasts "c1"    (chunk 1 4)
+   ++ lasts "c2"    (chunk 2 4)
+   ++ lasts "c3"    (chunk 3 4)
+   ++ lasts "e0"    (chunk 0 8)
+   ++ lasts "e1"    (chunk 1 8)
+   ++ lasts "e2"    (chunk 2 8)
+   ++ lasts "e3"    (chunk 3 8)
+   ++ lasts "e4"    (chunk 4 8)
+   ++ lasts "e5"    (chunk 5 8)
+   ++ lasts "e6"    (chunk 6 8)
+   ++ lasts "e7"    (chunk 7 8)
    )
 
  where
@@ -164,7 +192,7 @@ features history re
    ,(prefix ++ "_diff_oc",      days part diff_oc)
    ,(prefix ++ "_diff_oac",     days part diff_oac)
    ,(prefix ++ "_volume",     days part volume)
-   ,(prefix ++ "_volume_on_open",days part vol_on_open)
+   -- ,(prefix ++ "_volume_on_open",days part vol_on_open)
    ,(prefix ++ "_open_on_volume",days part open_on_vol)
    ]
 
@@ -177,7 +205,7 @@ features history re
    ,(prefix ++ "_diff_oc",       fun part diff_oc)
    ,(prefix ++ "_diff_oac",      fun part diff_oac)
    ,(prefix ++ "_volume",        fun part volume)
-   ,(prefix ++ "_volume_on_open",fun part vol_on_open)
+   -- ,(prefix ++ "_volume_on_open",fun part vol_on_open)
    ,(prefix ++ "_open_on_volume",fun part open_on_vol)
    ]
 
@@ -190,7 +218,17 @@ features history re
    ++ mkscalars devi_rel (prefix++"_dev_rel") part
 
   grows prefix part
-   = mkscalars (\v f -> avg_growth $ V.map f v) (prefix++"_avg") part
+   = mkscalars (\v f -> avg_rel $ V.map f v) (prefix++"_avg") part
+
+  heads prefix part
+   = mkscalars (\v f -> V.head $ V.map f v) (prefix++"_head") part
+
+  lasts prefix part
+   = mkscalars (\v f -> V.last $ V.map f v) (prefix++"_last") part
+
+  avg_rel v
+   = let mean = V.sum v `divvy` fromIntegral (V.length v)
+     in  mean `divvy` open re
 
 
   diff_oc e  = close e - open e
@@ -262,8 +300,8 @@ predict e future
 
 
 daysHistory = 200
-daysFuture  = 50
-minVolume = 100000
+daysFuture  = 5
+minVolume = 10
 daysAboveMin = 100
 
 filterVolumes :: V.Vector RawEntry -> Bool
@@ -437,7 +475,7 @@ showTrainedAsVw :: Company -> (Features, String, Double) -> String
 showTrainedAsVw c (Features changes grads, date, label)
  = show_float c date "label" label ++ " " ++ show importance ++ " '" ++ asxCode c ++ "-" ++ date
  ++ " |all " ++ showChanges ++ " " ++ showGrads
- ++ " |cat_" ++ cleanGroup c ++ " " ++ showChanges ++ " " ++ showGrads ++ "\n"
+ ++ " cat_" ++ cleanGroup c ++ "\n"
  where
   showChanges
    = intercalate " "
