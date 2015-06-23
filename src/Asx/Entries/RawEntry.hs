@@ -90,6 +90,7 @@ listOfChangeDays prefix ch
 
 data Features
  = Features
+    Double
    [(String, ChangeDays)]
    [(String, Double)]
  deriving (Eq, Ord, Show)
@@ -97,6 +98,7 @@ data Features
 features :: V.Vector RawEntry -> RawEntry -> Features
 features history re
  = Features
+   ( avg_growth history )
    (  changedays "whole" history
    ++ changedays "c0"   (chunk 0 4)
    ++ changedays "c1"   (chunk 1 4)
@@ -278,15 +280,15 @@ features history re
       $ V.filter (\h -> f (pricer h `divvy` p)) hist
 
 
-avg_growth :: V.Vector Double -> Double
-avg_growth future
- = let chunksz = V.length future `div` 4
-   in  V.sum (V.drop (chunksz * 3) future) `divvy` V.sum (V.take chunksz future)
-
-predict_growth hist e future
+avg_growth :: V.Vector RawEntry -> Double
+avg_growth hist
  = let histlen    = 10
        histrecent = V.map open $ V.drop (V.length hist - histlen) hist
        histavg    = V.sum histrecent `divvy` fromIntegral histlen
+   in histavg
+
+predict_growth hist e future
+ = let histavg    = avg_growth hist
 
        future'    = V.map open future
        futavg     = V.sum future' `divvy` fromIntegral (V.length future)
@@ -300,7 +302,7 @@ predict e future
 
 
 daysHistory = 200
-daysFuture  = 5
+daysFuture  = 20
 minVolume = 10
 daysAboveMin = 100
 
@@ -361,8 +363,8 @@ predictEntries records
 
 
 addQuantilesToFeature :: FeaturesQL -> Features -> Features
-addQuantilesToFeature (FeaturesQL qdays qgrads) (Features days grads)
- = Features days
+addQuantilesToFeature (FeaturesQL qdays qgrads) (Features val days grads)
+ = Features val days
   (grads ++ quantDays ++ quantGrads)
  where
   quantDays :: [(String, Double)]
@@ -433,7 +435,7 @@ mkQuantileMap :: [Features] -> FeaturesQ
 mkQuantileMap fs
  = foldl join emptyFQ fs
  where
-  join qs (Features days grads)
+  join qs (Features _ days grads)
    = foldl addDays 
    ( foldl addGrad qs grads) days
 
@@ -472,8 +474,8 @@ lookupFQ i (FeaturesQ qdays qgrads)
 
 
 showTrainedAsVw :: Company -> (Features, String, Double) -> String
-showTrainedAsVw c (Features changes grads, date, label)
- = show_float c date "label" label ++ " " ++ show importance ++ " '" ++ asxCode c ++ "-" ++ date
+showTrainedAsVw c (Features val changes grads, date, label)
+ = show_float c date "label" label ++ " " ++ show importance ++ " '" ++ asxCode c ++ "-" ++ date ++ "-" ++ show_float c date "current value" val
  ++ " |all " ++ showChanges ++ " " ++ showGrads
  ++ " cat_" ++ cleanGroup c ++ "\n"
  where
