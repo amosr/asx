@@ -1,0 +1,52 @@
+#!/bin/bash -eu
+
+# ./predict data_dir
+# pulls latest entries and runs against every model in data directory
+
+DRY=0
+
+data_dir="$1"
+date=`date "+%Y-%m-%d"`
+
+file_quants="$data_dir/quants"
+file_questions="$data_dir/questions.$date"
+file_predict_into="$data_dir/predict.$date."
+file_analyse_into="$data_dir/analysis.$date"
+
+echo "--- Emitting predictions"
+if [ $DRY -ne 1 ]; then
+    dist/build/asx/asx predict-into $file_quants $file_questions
+fi
+
+# fix up silly - program writes to wrong file because it splits for multithreads
+echo "--- Moving ${file_questions}0 to $file_questions"
+if [ $DRY -ne 1 ]; then
+    mv ${file_questions}0 $file_questions
+fi
+
+for model in $data_dir/model*
+do
+    suffix="${model##*.}"
+    echo "--- Model is $model with id $suffix"
+
+    predict="${file_predict_into}${suffix}"
+
+    if [ $DRY -ne 1 ]; then
+        vw -q aa -t -i $model -p "${predict}_unsorted" $file_questions
+    fi
+    echo "--- Sorting predictions for $suffix"
+    if [ $DRY -ne 1 ]; then
+        sort -nr < "${predict}_unsorted" > $predict
+        rm "${predict}_unsorted"
+    fi
+
+done
+
+echo "--- Analysing predictions"
+if [ $DRY -ne 1 ]; then
+    dist/build/asx/asx analyse ${file_analyse_into} ${file_predict_into}*
+fi
+
+
+echo "--- All done"
+

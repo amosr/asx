@@ -1,5 +1,6 @@
 import Asx.CompanyList.IO as CL
 import Asx.Training.IO    as TR
+import Asx.Analysis.IO    as AN
 
 import System.Environment
 
@@ -13,18 +14,13 @@ main
   run ["grab-force"]
     = CL.grabAllCompanies True
 
-  run ("training":quants:codes)
-    = TR.training 5 quants TrainPrint codes
-  run ("train-into":quants:into:codes)
-    = TR.training 5 quants (TrainInto into) codes
+  run ("training":stride:future:quants:codes)
+    = TR.training (read future) (read stride) quants TrainPrint codes
+  run ("train-into":stride:future:quants:into:codes)
+    = TR.training (read future) (read stride) quants (TrainInto into) codes
 
-  run ("training-s":stride:quants:codes)
-    = TR.training (read stride) quants TrainPrint codes
-  run ("train-into-s":stride:quants:into:codes)
-    = TR.training (read stride) quants (TrainInto into) codes
-
-  run ("train-labels-into":stride:quants:into:codes)
-    = TR.training (read stride) quants (TrainLabels into) codes
+  run ("train-labels-into":stride:future:quants:into:codes)
+    = TR.training (read future) (read stride) quants (TrainLabels into) codes
 
   run ("predict":quants:codes)
     = TR.predict quants Nothing codes
@@ -35,6 +31,9 @@ main
     = TR.printQuantiles (read stride) codes
   run ("quantiles-into":stride:into:codes)
     = TR.writeQuantiles (read stride) into codes
+
+  run ("analyse":into:predictions)
+    = AN.analyse into predictions
 
   run _
    = usage
@@ -47,11 +46,11 @@ usage
  , "asx grab"
  , "    get company data off yahoo"
  , ""
- , "asx training stride quants [code ...]"
+ , "asx training stride future quants [code ...]"
  , "    get training data for given codes"
  , "    use quantile data in quants file"
  , ""
- , "asx train-into stride quants into [code ...]"
+ , "asx train-into stride future quants into [code ...]"
  , "    write training data for given codes"
  , "    use quantile data in quants file"
  , ""
@@ -66,4 +65,7 @@ usage
  , ""
  , "asx quantiles-into stride into [code ...]"
  , "    get quantiles for codes and then store in file"
+ , ""
+ , "asx analyse into prediction-files"
+ , "    read different predictions on same things, average or whatever"
  , "" ]

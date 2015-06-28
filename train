@@ -1,0 +1,48 @@
+#!/bin/bash -eu
+
+# ./train data_dir days_future
+
+DRY=0
+STRIDE=200
+
+data_dir="$1"
+days_future="$2"
+
+file_quants="$data_dir/quants"
+file_train="$data_dir/train.$days_future"
+file_model="$data_dir/model.$days_future"
+
+echo "--- Clear training data before starting..."
+if [ $DRY -ne 1 ]; then
+    rm -v ${file_train}         || echo ok
+    rm -v ${file_train}.        || echo ok
+    rm -v ${file_train}.*       || echo ok
+fi
+
+echo "--- Get training data"
+if [ $DRY -ne 1 ]; then
+    dist/build/asx/asx train-into $STRIDE $days_future $file_quants ${file_train}. +RTS -N4
+fi
+
+# fix up silly - program writes to wrong file because it splits for multithreads
+echo "--- Merging training results into one file:"
+if [ $DRY -ne 1 ]; then
+    cat ${file_train}.* > $file_train
+fi
+
+echo "--- Training model into $file_model"
+
+if [ $DRY -ne 1 ]; then
+    vw -c -q aa --passes 2 -f $file_model $file_train
+fi
+
+echo "--- Removing training files:"
+if [ $DRY -ne 1 ]; then
+    rm -v ${file_train}         || echo ok
+    rm -v ${file_train}.        || echo ok
+    rm -v ${file_train}.*       || echo ok
+fi
+
+
+echo "--- All done"
+

@@ -79,7 +79,7 @@ readCompany exec nothing c
           -> exec contents
 
 
-training stride quants into codes
+training future stride quants into codes
  = do -- Clear file
       maybe (return ()) (flip writeFile "") (fileOfTrainingCommand into)
 
@@ -96,7 +96,7 @@ training stride quants into codes
       
  where
   run cap q c contents
-   = do let trained = trainEntries stride contents
+   = do let trained = trainEntries future stride contents
             qt      = map (\(f,d,l) -> (addQuantilesToFeature q f, d, l)) trained
         case into of
          TrainPrint
@@ -160,7 +160,7 @@ getQuantiles stride codes
         deepseq acc' $ return acc'
 
   get1q contents
-   = do let trained = trainEntries stride contents
+   = do let trained = trainEntries 10 stride contents
         let feats   = map (\(f,_,_) -> f) trained
         let qm = mkQuantileMap feats
         putStrLn "ok"

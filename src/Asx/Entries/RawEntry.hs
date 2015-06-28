@@ -5,7 +5,6 @@
 --   but could be slicing the vector
 --
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
 module Asx.Entries.RawEntry where
 
 import Asx.Entries.Company
@@ -282,15 +281,15 @@ features history re
 
 avg_growth :: V.Vector RawEntry -> Double
 avg_growth hist
- = let histlen    = 10
-       histrecent = V.map open $ V.drop (V.length hist - histlen) hist
+ = let histlen    = 2
+       histrecent = V.map high $ V.drop (V.length hist - histlen) hist
        histavg    = V.sum histrecent `divvy` fromIntegral histlen
    in histavg
 
 predict_growth hist e future
  = let histavg    = avg_growth hist
 
-       future'    = V.map open future
+       future'    = V.map low future
        futavg     = V.sum future' `divvy` fromIntegral (V.length future)
    in  futavg `divvy` histavg
 
@@ -302,7 +301,6 @@ predict e future
 
 
 daysHistory = 200
-daysFuture  = 20
 minVolume = 10
 daysAboveMin = 100
 
@@ -338,12 +336,12 @@ filterNotZero e
  && adjclose e > 0
 
 
-trainEntries stride records
+trainEntries future stride records
  = V.toList
  $ V.map (\(pre,e,post) -> (features pre e, date e, predict_growth pre e post))
  $ V.filter (\(pre,e,post) -> filterMissing (pre V.++ post))
  $ V.filter (\(pre,e,post) -> filterVolumes pre)
- $ windowed daysHistory daysFuture stride
+ $ windowed daysHistory future stride
  $ V.filter filterNotZero
  $ records
 
