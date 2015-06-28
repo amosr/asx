@@ -2,7 +2,8 @@ module Asx.Analysis.Analysis where
 
 import qualified Data.Map as Map
 import Text.Printf
-import Data.List (sort)
+import Data.List (sort, sortBy)
+import Data.Function (on)
 
 row :: String -> (String, Double)
 row s
@@ -25,10 +26,9 @@ mapMerge
 
 mapby   :: ([Double] -> Double)
         -> Map.Map String [Double]
-        -> Map.Map Double String
+        -> [(Double, String)]
 mapby f m
- = Map.fromList
- $ map (\(k,v) -> (f v, k))
+ = map (\(k,v) -> (f v, k))
  $ Map.toList m
 
 averages
@@ -55,12 +55,12 @@ analyses
    , ("min", mins) ]
 
 
-showResult :: Map.Map Double String -> String
-showResult mm
+showResult :: [(Double, String)] -> String
+showResult res
  = unlines
  $ map sho
  $ reverse
- $ Map.toList mm
+ $ sortBy (compare `on` fst) res
  where
   sho (k,v)
    = printf "%.6f" k ++ " " ++ v
