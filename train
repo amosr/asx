@@ -3,10 +3,10 @@
 # ./train data_dir days_future
 
 DRY=0
-STRIDE=200
 
 data_dir="$1"
 days_future="$2"
+STRIDE="$3"
 
 file_quants="$data_dir/quants"
 file_train="$data_dir/train.$days_future"
@@ -33,7 +33,7 @@ fi
 echo "--- Training model into $file_model"
 
 if [ $DRY -ne 1 ]; then
-    vw -c -q aa --passes 2 -f $file_model $file_train
+    vw -q aa -f $file_model $file_train
 fi
 
 echo "--- Removing training files:"

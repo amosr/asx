@@ -97,7 +97,7 @@ data Features
 features :: V.Vector RawEntry -> RawEntry -> Features
 features history re
  = Features
-   ( avg_growth history )
+   ( high re )
    (  changedays "whole" history
    ++ changedays "c0"   (chunk 0 4)
    ++ changedays "c1"   (chunk 1 4)
@@ -287,7 +287,7 @@ avg_growth hist
    in histavg
 
 predict_growth hist e future
- = let histavg    = avg_growth hist
+ = let histavg    = high e
 
        future'    = V.map low future
        futavg     = V.sum future' `divvy` fromIntegral (V.length future)
@@ -329,11 +329,11 @@ filterMissing vs
 
 filterNotZero :: RawEntry -> Bool
 filterNotZero e
- =  open e > 0
- && close e > 0
- && low e > 0
- && high e > 0
- && adjclose e > 0
+ =  open e > 0.01
+ && close e > 0.01
+ && low e > 0.01
+ && high e > 0.01
+ && adjclose e > 0.01
 
 
 trainEntries future stride records
@@ -351,7 +351,7 @@ predictEntries records
  $ filter (\(pre,e,post) -> filterVolumes pre)
  $ lastOfVec
  $ V.toList
- $ windowed daysHistory 0 1
+ $ windowed daysHistory 0 0
  $ V.filter filterNotZero
  $ records
  where

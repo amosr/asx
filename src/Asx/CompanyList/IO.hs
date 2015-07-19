@@ -22,6 +22,7 @@ grabAllCompanies force
        Right vs
         -> do   errs <- concat <$> P.parallel (V.toList $ V.map checkExists vs)
                 putStrLn ("Errors: " ++ show (length errs))
+                putStrLn (show $ map asxCode errs)
  where
   checkExists c
    = do putStr (asxCode c ++ ": ")

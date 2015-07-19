@@ -13,6 +13,12 @@ file_questions="$data_dir/questions.$date"
 file_predict_into="$data_dir/predict.$date."
 file_analyse_into="$data_dir/analysis.$date"
 
+echo "--- Getting latest things"
+if [ $DRY -ne 1 ]; then
+    dist/build/asx/asx grab-force +RTS -N64
+    # echo skip
+fi
+
 echo "--- Emitting predictions"
 if [ $DRY -ne 1 ]; then
     dist/build/asx/asx predict-into $file_quants $file_questions
