@@ -41,7 +41,7 @@ main
 usage
  = putStrLn
  $ unlines
- [ "asx shit"
+ [ "asx things"
  , ""
  , "asx grab"
  , "    get company data off yahoo"
