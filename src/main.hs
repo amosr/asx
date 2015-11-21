@@ -32,6 +32,9 @@ main
   run ("quantiles-into":stride:into:codes)
     = TR.writeQuantiles (read stride) into codes
 
+  run ("export-ivory":stride:[])
+    = TR.exportAsIvory 0
+
   run ("analyse":into:predictions)
     = AN.analyse into predictions
 

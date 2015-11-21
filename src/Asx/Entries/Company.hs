@@ -43,6 +43,7 @@ dropLine
 downloadUrl :: Company -> String
 downloadUrl c
  = "http://real-chart.finance.yahoo.com/table.csv?s=" ++ asxCode c ++ ".AX"
+-- = "http://www.google.com/finance/getprices?i=60&p=100Y&f=d,o,h,l,c,v&df=cpct&q=" ++ asxCode c ++ ".AX"
 
 
 storagefile :: Company -> String

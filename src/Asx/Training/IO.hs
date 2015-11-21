@@ -19,6 +19,10 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Vector as V
 import qualified Network.HTTP.Conduit   as H
 
+import Data.List (intercalate)
+
+import Text.Printf
+
 data TrainingCommand
  = TrainPrint
  | TrainInto String
@@ -166,4 +170,64 @@ getQuantiles stride codes
         putStrLn "ok"
         return qm
 
+
+exportAsIvory _stride
+ = do list <- getCompaniesList
+      case list of
+       Left err -> print err
+       Right cs -> mapM_ go $ V.toList cs
+      return ()
+ where
+  go c
+   = do fe <- D.doesFileExist (storagefile c)
+        case fe of
+         False -> return ()
+         True
+          -> do res <- decodeEntries <$> BL.readFile (storagefile c)
+                case res of
+                 Left err -> print err
+                 Right r' -> mapM_ (putStr . printAsIvory c) $ interp $ V.toList r'
+
+  interp [] = []
+  interp [v] = [v]
+  interp (v:u:vs)
+   = [interp_hr v n u | n <- [0..23]]
+     ++ interp (u:vs)
+
+  interp_hr v n u
+   = let lerp x y = x * (1 - (n / 24)) + y * (n / 24)
+         lerpon f = lerp (f v) (f u)
+     in v { date = date v ++ "T" ++ pad_hr (show (truncate n)) ++ ":00:00Z"
+          , open = lerpon open
+          , high = lerpon high
+          , low  = lerpon low
+          , close= lerpon close
+          , volume= lerpon volume
+          , adjclose = lerpon adjclose
+     }
+
+  pad_hr [x] = '0' : [x]
+  pad_hr xs  = xs
+
+  printAsIvory c r
+   =  jso (asxCode c) (date r)
+          [("open", flo $ open r)
+          ,("high", flo $ high r)
+          ,("low", flo $ low r)
+          ,("close", flo $ close r)
+          ,("volume", flo $ volume r)
+          ,("adjclose", flo $ adjclose r)
+          ,("category", str $ gicsGroup c)
+          ,("name",     str $ companyName c)
+          ]
+
+  flo x = (show (truncate (x * 100000) :: Int))
+  str x = show x
+
+  jso cod dat xs
+   = row cod dat "data" ("{" ++ (intercalate "," $ map (\(a,b) -> show a ++ ":" ++ b) xs) ++ "}")
+   ++ concat [row cod dat nm val | (nm,val) <- xs]
+
+  row cod dat nm val
+   = cod ++ "|" ++ nm ++ "|" ++ val ++ "|" ++ dat ++ "\n"
 
